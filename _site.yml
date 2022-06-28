@@ -1,0 +1,5 @@
+name: "Anna E. Fürtjes"
+output_dir: "."
+navbar:
+  title: "FreeSurfer annotation files"
+  type: inverse

@@ -1,0 +1,417 @@
+---
+title: "Exploring FreeSurfer annotation files"
+author: "Anna Furtjes"
+date: "09/12/2020"
+output: 
+  html_document:
+    code_folding: hide
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+    theme: paper
+---
+
+
+
+<br>
+
+***
+
+The code displayed here was generated during my first exploration of FreeSurfer annotation files. Before I understood how FreeSurfer worked, I wanted to see whether I could use annotation files to work out percentages of regions in one atlas that may be used to approximate a region in another atlas. This is definitely not the accurate way of doing it, but it was a fun little exercise that may come in handy for you when you are also learning to understand FreeSurfer data structures. 
+
+The mistake I made was that I thought I could extract one atlas from already processed imaging derived phenotypes without using FreeSurfer. I later worked on a Registered Report where I actually compare different brain atlases, and there I used established FreeSurfer pipelines instead (which can also be found on my GitHub).
+
+```{r, echo=FALSE}
+htmltools::img(src = knitr::image_uri(file.path("C:/Users/k1894405/Documents/GitHub/Playing_with_parcellations/", "Atlases.PNG")))
+```
+
+
+
+
+<br>
+
+# 1. Build a table associating vertices with labels in DK
+
+## 1.1 Load libraries
+```{r libraries, warning=FALSE}
+library(pander)
+library(freesurferformats)
+library(knitr)
+library(stringr)
+library(data.table)
+library(plyr)
+library(freesurfer)
+```
+
+<br>
+
+## 1.2 Read in annotation file for Desikan-Killiany
+```{r read_DK}
+
+annot = read.fs.annot("C:/Users/k1894405/OneDrive - King's College London/temp/lh.aparc.annot")
+
+```
+
+These annotation files are included in the FreeSurfer software package when you download it. They have an inherent structure and I've found it helpful to display the structure with `str(annot)` to understand what it contains. Put simply, it assigns vertices to regions-of-interest (ROIs) that are characterised by numeric codes and a specific color for visualisation. 
+
+<br>
+<br>
+
+
+## 1.3 Display properties contained in annotation file
+```{r properties_DK}
+# show color table and regions
+ctable = annot$colortable$table;
+regions = annot$colortable$struct_names;
+for (region_idx in seq_len(annot$colortable$num_entries)) {
+  cat(sprintf("Region #%d called '%s' has code '%d'.\n", region_idx, regions[region_idx], ctable[region_idx,5]));
+}
+```
+
+
+These are the 34 DK regions, including the corpus callosum (?) and an unknown category 
+Note that when you ask for `table(annot$label_codes)`. If we had used the DKT annotation file, instead of the DK annotation file, no vertices would have been assigned to ROIs specific to DK such as frontal and temporal pole or bankssts.
+
+
+<br>
+<br>
+
+
+## 1.4 Summarise per-vertex info in table
+
+We aim to extract a table that outlines which vertex is assigned to which region. 
+
+```{r estract_DK}
+regions = annot$colortable$struct_names
+ctable = annot$colortable$table
+names_and_codes<-data.frame(name=NULL,code=NULL)
+
+for (region_idx in seq_len(annot$colortable$num_entries)) {
+        names_and_codes[region_idx,"name"]<-regions[region_idx]
+        names_and_codes[region_idx,"codes"]<-ctable[region_idx,5]
+}
+
+
+# I would like a table with three rows:
+# vertex_idx, label_codes, and corresponding names
+vertex_by_region<-data.frame(vertices=annot$vertices,label_codes=annot$label_codes)
+
+# create a new variables that holds the region_name associated with this vertex
+vertex_by_region$region_name<-0
+
+cd<-as.numeric(unique(vertex_by_region$label_codes))
+# some vertices have not been assigned to any label
+cd<-cd[which(cd !=0)]
+# if I remove it I have 34 labels left which is correct for DK atlas
+
+for(i in cd){
+  vertex_by_region[which(vertex_by_region$label_codes == i),"region_name"]<-names_and_codes[which(names_and_codes$codes == i),"name"]
+}
+
+
+pander(head(vertex_by_region))
+
+```
+
+As this table contains `r nrow(vertex_by_region)` rows, it's too big to display entirely; only printing the head of the table. 
+
+The vertices are in standard fsaverage space. ROIs can be constructed as the sum of all the vertices that fall into an area. ?h.area, ?h.volume, and ?h.thickness contain the per-vertex value for either area, volume or thickness. When I started playing with the annotation files I wanted to re-construct Destrieux IDPs (imaging derived-phenotypes) from DK IDPs, which is not the most accurate or sensible way, but I didn't realise it then.
+
+<br>
+<br>
+
+
+# 2. Repeat the same thing for the Destrieux atlas 
+
+## 2.1 Read in annotation file for Destrieux
+```{r read_destrieux}
+desannot = read.fs.annot("C:/Users/k1894405/OneDrive - King's College London/temp/lh.aparc.a2009s.annot")
+
+```
+
+<br>
+
+
+## 2.2 Diplay properties contained in this file
+```{r properties_destrieux}
+ctable = desannot$colortable$table;
+regions = desannot$colortable$struct_names;
+for (region_idx in seq_len(desannot$colortable$num_entries)) {
+  cat(sprintf("Region #%d called '%s' has code '%d'.\n", region_idx, regions[region_idx], ctable[region_idx,5]));
+}
+```
+Same here: we have the 74 Destrieux regions + the corpus callosum and an unknown category.
+
+<br>
+
+
+## 2.3 Extract Destrieux information 
+```{r extract_destrieux}
+# each label code stands for a region
+regions = desannot$colortable$struct_names
+ctable = desannot$colortable$table
+names_and_codes<-data.frame(name=NULL,code=NULL)
+
+for (region_idx in seq_len(desannot$colortable$num_entries)) {
+  names_and_codes[region_idx,"name"]<-regions[region_idx]
+  names_and_codes[region_idx,"codes"]<-ctable[region_idx,5]
+}
+
+# I would like a table with three rows:
+# vertex_idx, label_codes, and corresponding names
+des_vertex_by_region<-data.frame(vertices=desannot$vertices,label_codes=desannot$label_codes)
+des_vertex_by_region$region_name<-0
+
+cd<-as.numeric(unique(des_vertex_by_region$label_codes))
+# somehow this contains a zero which does not represent a valid label code
+cd<-cd[which(cd !=0)]
+# if I remove it I have only 74 labels left which is correct for Destrieux atlas
+
+for(i in cd){
+  des_vertex_by_region[which(des_vertex_by_region$label_codes == i),"region_name"]<-names_and_codes[which(names_and_codes$codes == i),"name"]
+}
+
+pander(head(des_vertex_by_region))
+
+
+```
+
+
+<br>
+<br>
+
+***
+
+# 3. Merge the atlases by vertices
+
+We can now match the two atlases by vertex, as they should both be in fsaverage space.
+
+<br>
+
+
+## 3.1 Display head of file with matched atlases
+```{r merge_atlases}
+# rename columns to know which atlas they belong to
+names(vertex_by_region)<-c("vertices","DK_label_codes","DK_region_name")
+names(des_vertex_by_region)<-c("vertices","Destrieux_label_codes","Destrieux_region_name")
+
+# merge the files by vertices
+both<-merge(des_vertex_by_region,vertex_by_region,by="vertices")
+
+pander(head(both))
+
+
+```
+
+
+<br>
+<br>
+
+## 3.2 Display Destrieux regions that fall into each DK region
+```{r}
+#select the unique regions in DK
+unique_DK_region<-unique(both$DK_region_name)
+# delete unknown category and corpus callosum
+unique_DK_region<-unique_DK_region[unique_DK_region!="unknown" & unique_DK_region!="0"]
+# 34 DK regions left
+
+number_matches<-0
+
+for(i in unique_DK_region){
+  match_region<-NULL
+  match_region<-prop.table(table(both[which(both$DK_region_name == i),"Destrieux_region_name"]))
+  # restructure 
+  match_region<-reshape2::melt(match_region)
+  names(match_region)<-c("Destrieux_region_name","percent_DK")
+  
+  number_matches<-number_matches+nrow(match_region)
+  
+  # break the code if the sum of percentages that make up a region is not equal to 1
+  if(isFALSE(all.equal(1,sum(match_region$percent_DK)))){print("Your percentages do not add up to 1!");break}
+  
+  var_name<-paste0("match_",i)
+  assign(var_name,match_region)
+}
+
+# print results
+rm("match_region")
+all_match<-ls(pattern="match_")
+# make sure we have 34 regions
+if(length(all_match)!=34){print("We did not end up with the correct number of DKT regions"); break} # break with 31 regions in DKT, DK 34 regions
+
+
+kable(match_entorhinal,caption = "Example: Which areas is the entorhinal made up of?")
+```
+
+
+For example, this indicates that, of the total area in the entorhinal (DK), X% come from what is the parahippocampal and Y% come from what is the temporal pole in Destrieux. However, what we are interested in the percentage of Destrieux regions that fall into the DK region.
+
+
+<br>
+
+***
+
+## 3.3 Work out percentages of Destrieux regions that fall into each DK region
+First, we extract the area where the entorhinal (DKT) and parahippocampal (Destrieux) and temporal pole (Destrieux) overlap, and we calculate the percentage of the Destrieux area that falls into the entorhinal. 
+
+```{r}
+# table to store all
+all_percentages<-as.data.frame(matrix(nrow=0, ncol=3))
+names(all_percentages) =c("DK_region","Des_region","percent")
+
+
+# all saved in all_match
+for (i in all_match){
+  # get table containing regions
+  match<-get(i)
+  match<-as.data.frame(match)
+  # name DK_region of interest DK_region
+  DK_region<-str_remove_all(i,"match_")
+  
+  # save match and DK_region alongside another in all_percentages
+  all_percentages=rbind(all_percentages, cbind(DK_region, match))
+
+}
+
+DT::datatable(all_percentages, rownames=FALSE, filter="top",options= list(pageLength=10,scrollX=T), caption = "Percentages of Destrieux regions that fall into DK region")
+
+```
+
+<br>
+<br>
+
+***
+
+# 4. Can I apply this idea meaninfully to individual level data? 
+
+I tried to display the DK atlas purely based on information contained in the Destrieux atlas. 
+The code can easily be adapted to infer all regions in a loop but there would not be space to display it here. So, for the purpose of this document I only display the left transversetemporal.
+
+<br>
+
+
+## 4.1 Surface Area
+
+```{r}
+rm(list = setdiff(ls(), "all_percentages"))
+# all_percentages only contains left hemispehere
+all_percentages$DK_region = paste0("lh.",all_percentages$DK_region)
+all_percentages$Destrieux_region_name = paste0("lh.",all_percentages$Destrieux_region_name)
+# whenever "-" is used, R gets confused
+all_percentages$DK_region = str_replace(all_percentages$DK_region, pattern="-", replacement = ".")
+all_percentages$Destrieux_region_name = str_replace(all_percentages$Destrieux_region_name, pattern="-", replacement = ".")
+
+# read in real Destrieux file
+Des_surfarea = fread("C:/Users/k1894405/OneDrive - King's College London/temp/Des_SurfArea_all", nrows = 1000)
+
+# chose DK region to infer from Des
+testregion = "lh.transversetemporal"
+# get percentages to which Des regions overlap with DK
+statsregion = all_percentages[which(all_percentages$DK_region == testregion),]
+# get formula: weighted sum of Des regions that make up DK
+formula = with(statsregion, paste0("(",percent_DK," * Des_surfarea$",Destrieux_region_name, ")", collapse = " + "))
+fulleq <- paste0('DK_inferred', ' <- ', formula)
+# execute formula
+eval(parse(text=fulleq))
+# merge inferred region with IIDs 
+merged = as.data.frame(cbind(Des_surfarea$IID, DK_inferred))
+names(merged) = c("IID","inferred")
+
+# read in real DK file
+DK_surfarea = fread("C:/Users/k1894405/OneDrive - King's College London/temp/DK_SurfArea_all", nrows = 1000)
+# keep relevant column only
+DK_surfarea = subset(DK_surfarea, select = c("IID", testregion))
+
+# merge inferred with real area
+merged = merge(DK_surfarea, merged, by = "IID")
+
+names(merged) = c("IID", "real", "inferred")
+# plot
+plot(merged$real, merged$inferred, main = paste("Inferred surface area:",testregion))
+abline(a=0, b=1, col="red")
+```
+
+The inferred estimate seems to overestimate the region size this way. 
+
+<br>
+
+## 4.2 Grey-matter volume
+
+```{r}
+rm(list = setdiff(ls(), "all_percentages"))
+
+
+# read in real Destrieux file
+Des_volume = fread("C:/Users/k1894405/OneDrive - King's College London/temp/Des_GrayVol_all", nrows = 1000)
+
+# chose DK region to infer from Des
+testregion = "lh.transversetemporal"
+# get percentages to which Des regions overlap with DK
+statsregion = all_percentages[which(all_percentages$DK_region == testregion),]
+# get formula: weighted sum of Des regions that make up DK
+formula = with(statsregion, paste0("(",percent_DK," * Des_volume$",Destrieux_region_name, ")", collapse = " + "))
+fulleq <- paste0('DK_inferred', ' <- ', formula)
+# execute formula
+eval(parse(text=fulleq))
+# merge inferred region with IIDs 
+merged = as.data.frame(cbind(Des_volume$IID, DK_inferred))
+names(merged) = c("IID","inferred")
+
+# read in real DK file
+DK_volume = fread("C:/Users/k1894405/OneDrive - King's College London/temp/DK_GrayVol_all", nrows = 1000)
+# keep relevant column only
+DK_volume = subset(DK_volume, select = c("IID", testregion))
+
+# merge inferred with real area
+merged = merge(DK_volume, merged, by = "IID")
+
+names(merged) = c("IID", "real", "inferred")
+# plot
+plot(merged$real, merged$inferred, main = paste("Inferred volume:",testregion))
+abline(a=0, b=1, col="red")
+```
+
+
+<br>
+
+## Cortical thickness
+
+```{r}
+rm(list = setdiff(ls(), "all_percentages"))
+
+
+# read in real Destrieux file
+Des_thickness = fread("C:/Users/k1894405/OneDrive - King's College London/temp/Des_ThickAvg_all", nrows = 1000)
+
+# chose DK region to infer from Des
+testregion = "lh.transversetemporal"
+# get percentages to which Des regions overlap with DK
+statsregion = all_percentages[which(all_percentages$DK_region == testregion),]
+# get formula: weighted sum of Des regions that make up DK
+formula = with(statsregion, paste0("(",percent_DK," * Des_thickness$",Destrieux_region_name, ")", collapse = " + "))
+fulleq <- paste0('DK_inferred', ' <- ', formula)
+# execute formula
+eval(parse(text=fulleq))
+# merge inferred region with IIDs 
+merged = as.data.frame(cbind(Des_thickness$IID, DK_inferred))
+names(merged) = c("IID","inferred")
+
+# read in real DK file
+DK_thickness = fread("C:/Users/k1894405/OneDrive - King's College London/temp/DK_ThickAvg_all", nrows = 1000)
+# keep relevant column only
+DK_thickness = subset(DK_thickness, select = c("IID", testregion))
+
+# merge inferred with real area
+merged = merge(DK_thickness, merged, by = "IID")
+
+names(merged) = c("IID", "real", "inferred")
+# plot
+plot(merged$real, merged$inferred, main = paste("Inferred thickness:",testregion))
+abline(a=0, b=1, col="red")
+```
+
+In all cases the inferred volume seems to be overestimated.
+
+This is not the appropriate way of doing it anyway, but I learned a lot from playing with the parcellation files. I ended up using properly established protocols to map different brain atlases onto my participants data.
+
+
