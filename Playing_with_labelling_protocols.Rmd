@@ -26,9 +26,21 @@ htmltools::img(src = knitr::image_uri(file.path("C:/Users/k1894405/Documents/Git
 ```
 
 
+This document contains: 
+
+ 1. Use FreeSurfer annotation files to find out which vertex is assigned to which region. This is repeated in DK and Destrieux annotation files.
+ 
+ 2. Merge vertex-wise assignment information between the two atlases. 
+ 
+ 3. Work out which Destrieux regions overlap with DK regions, and the percentage of region overlap.
+ 
+ 4. Infer DK region based on Destrieux data alone, and compare against real DK region (illustrated using the left transversetemporal).
 
 
 <br>
+
+*** 
+
 
 # 1. Build a table associating vertices with labels in DK
 
