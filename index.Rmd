@@ -9,6 +9,8 @@ output:
     toc_depth: 2
     toc_float: yes
     theme: paper
+    includes:
+      after_body: footer.html
 ---
 
 
@@ -294,7 +296,7 @@ DT::datatable(all_percentages, rownames=FALSE, filter="top",options= list(pageLe
 
 ***
 
-# 4. Can I apply this idea meaninfully to individual level data? 
+# 4. Can I apply this idea meaningfully to individual level data? 
 
 I tried to display the DK atlas purely based on information contained in the Destrieux atlas. 
 The code can easily be adapted to infer all regions in a loop but there would not be space to display it here. So, for the purpose of this document I only display the left transversetemporal.
@@ -386,7 +388,7 @@ abline(a=0, b=1, col="red")
 
 <br>
 
-## Cortical thickness
+## 4.3 Cortical thickness
 
 ```{r}
 rm(list = setdiff(ls(), "all_percentages"))
